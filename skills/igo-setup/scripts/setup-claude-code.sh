@@ -7,8 +7,8 @@ FAILED=()
 step(){ printf '\n\033[36m==> %s\033[0m\n' "$1"; }
 has(){ command -v "$1" >/dev/null 2>&1; }
 ECC=0; AUDIT=1; PROFILE=normal
-BRAIN=1; VAULT="$HOME/Documents/IGO-Brain"; BNAME="$(id -un)"; BPRESET=executive
-for a in "$@"; do case "$a" in --ecc) ECC=1;; --skip-audit) AUDIT=0;; --profile=*) PROFILE="${a#*=}";; --no-brain) BRAIN=0;; --vault=*) VAULT="${a#*=}";; --name=*) BNAME="${a#*=}";; --preset=*) BPRESET="${a#*=}";; esac; done
+TEAMDIR=""; TEAMNAME=""; BRAIN=1; VAULT="$HOME/Documents/IGO-Brain"; BNAME="$(id -un)"; BPRESET=executive
+for a in "$@"; do case "$a" in --ecc) ECC=1;; --skip-audit) AUDIT=0;; --profile=*) PROFILE="${a#*=}";; --no-brain) BRAIN=0;; --vault=*) VAULT="${a#*=}";; --name=*) BNAME="${a#*=}";; --preset=*) BPRESET="${a#*=}";; --team-dir=*) TEAMDIR="${a#*=}";; --team-name=*) TEAMNAME="${a#*=}";; esac; done
 SEC="$HERE/../../../scripts/igo-sec.js"; BLOCKED=""
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -84,7 +84,7 @@ RULES="$HERE/../../../hooks/rules.md"
 grep -q IGO-AUTO-SKILLS "$HOME/.claude/CLAUDE.md" 2>/dev/null || { echo; cat "$RULES"; } >> "$HOME/.claude/CLAUDE.md"
 
 step "IGO Security Guard"
-if [ -f "$SEC" ]; then node "$SEC" init; node "$SEC" profile "$PROFILE"; node "$SEC" selftest; fi
+if [ -f "$SEC" ]; then node "$SEC" init; node "$SEC" profile "$PROFILE"; if [ -n "$TEAMDIR" ]; then if [ -n "$TEAMNAME" ]; then node "$SEC" team setup --dir "$TEAMDIR" --name "$TEAMNAME"; else node "$SEC" team setup --dir "$TEAMDIR"; fi; fi; node "$SEC" selftest; fi
 
 if [ $BRAIN = 1 ] && [ -f "$HERE/../../../scripts/igo-brain.js" ]; then
   step "Obsidian second brain"

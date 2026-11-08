@@ -7,6 +7,7 @@
 #   $env:IGO_PROFILE = "strict"        # security profile: strict | normal | open
 #   $env:IGO_NO_BRAIN = "1"            # skip Obsidian second brain
 #   $env:IGO_ECC = "1"                 # also install ECC
+#   $env:IGO_TEAM_DIR = "\\ADMIN-PC\IGO-Team-Logs"   # team activity folder (admin dashboard)
 #   $env:IGO_REPO = "owner/repo"       # use a fork
 #   $env:IGO_BRANCH = "main"
 
@@ -42,6 +43,7 @@
   if ($env:IGO_NAME)     { $setupArgs += @('-BrainName', $env:IGO_NAME) }
   if ($env:IGO_NO_BRAIN) { $setupArgs += '-NoBrain' }
   if ($env:IGO_ECC)      { $setupArgs += '-IncludeECC' }
+  if ($env:IGO_TEAM_DIR) { $setupArgs += @('-TeamLogDir', $env:IGO_TEAM_DIR); $setupArgs += @('-TeamName', $(if ($env:IGO_NAME) { $env:IGO_NAME } else { $env:USERNAME })) }
   & powershell.exe @setupArgs
 
   # 4. Register igo-dev-stack itself in Claude Code (from GitHub, so /plugin update works later)

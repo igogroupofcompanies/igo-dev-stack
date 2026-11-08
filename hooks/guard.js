@@ -8,6 +8,7 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 const C = require('../lib/common');
 const R = require('../lib/rules');
+const A = require('../lib/activity');
 
 const ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
 const out = o => { process.stdout.write(JSON.stringify(o)); process.exit(0); };
@@ -177,6 +178,7 @@ function preToolUse(inp, cfg, state) {
   }
   // Never return "allow": that would skip Claude Code's own permission prompt. Stay silent instead.
   if (decision === 'allow') return allow();
+  A.record(cfg, inp, { event: decision === 'deny' ? 'blocked' : 'needs-approval', tool, kind: A.summarise(tool, ti).kind, detail: A.summarise(tool, ti).detail, rule: top.id, sev: top.sev });
   const fix = decision === 'deny' ? 'Blocked. If this is really intended, explain why to the user and let them run it themselves, or change the security profile (igo-security-center).' : 'Needs your confirmation.';
   return out({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reasonText(findings, [mismatchNote, fix].filter(Boolean).join('\n')) } });
 }
@@ -184,6 +186,7 @@ function preToolUse(inp, cfg, state) {
 // ---------------- PostToolUse: injection scan on fetched content (feature 14) ----------------
 function postToolUse(inp, cfg) {
   const tool = inp.tool_name || '';
+  { const sm = A.summarise(tool, inp.tool_input); const resp = inp.tool_response || {}; A.record(cfg, inp, { event: 'action', tool, kind: sm.kind, detail: sm.detail, ok: !(resp && (resp.is_error || resp.error || resp.interrupted)), exit: resp && resp.exitCode !== undefined ? resp.exitCode : undefined }); }
   if (!(/^(WebFetch|WebSearch|Read|Bash|Grep)$/.test(tool) || tool.startsWith('mcp__'))) return allow();
   let text = inp.tool_response;
   if (typeof text !== 'string') { try { text = JSON.stringify(text); } catch (_) { return allow(); } }
@@ -224,6 +227,7 @@ function blueprintNote(ps, cfg) {
 
 function userPrompt(inp, state, cfg) {
   const prompt = String(inp.prompt || '');
+  A.record(cfg, inp, { event: 'prompt', detail: prompt });
   state.lastPrompt = prompt.slice(0, 2000);
   state.lastPromptAt = new Date().toISOString();
   const parts = [];
@@ -346,7 +350,11 @@ async function sessionStart(inp, cfg, state) {
     try { const bt = fs.readFileSync(path.join(ps.dir, '.ai', 'mcp_and_qa', 'BUG_TRACKER.md'), 'utf8'); const open = bt.split('\n').filter(l => /^\|\s*\w+\s*\|\s*S[12]\s*\|/.test(l) && !/fixed|closed|done/i.test(l)).length; if (open) ctx += ` ${open} open S1/S2 bug(s) in BUG_TRACKER.md.`; } catch (_) {}
   } else if (ps) { const n = blueprintNote(ps, cfg); if (n) ctx += '\n\n' + n.replace('Before the first code change', 'When coding work starts'); }
   if (notes.length) ctx += `\n\nSecurity notices - tell the user briefly at the start of your next reply:\n- ${notes.join('\n- ')}`;
-  out({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } });
+  A.record(cfg, inp, { event: 'session-start', detail: inp.source || '' });
+  const sy = A.sync(cfg);
+  const notice = cfg.teamLogging !== false && cfg.teamNotice !== false ? `IGO activity logging is ON (company policy): prompts, commands and files changed in Claude Code are recorded for ${A.member(cfg)}${cfg.teamLogDir ? ' and shared with the IGO admin' : ''}. Secrets and ID numbers are masked.` : undefined;
+  if (cfg.teamLogDir && !sy.ok) C.log('team-sync', { ok: false, reason: sy.reason });
+  out({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx }, ...(notice ? { systemMessage: notice } : {}) });
 }
 
 // ---------------- main ----------------
@@ -360,6 +368,8 @@ async function sessionStart(inp, cfg, state) {
     if (ev === 'PostToolUse') return postToolUse(inp, cfg);
     if (ev === 'UserPromptSubmit') return userPrompt(inp, state, cfg);
     if (ev === 'SessionStart') return await sessionStart(inp, cfg, state);
+    if (ev === 'Stop') { A.record(cfg, inp, { event: 'turn-end' }); A.sync(cfg); return allow(); }
+    if (ev === 'SessionEnd') { A.record(cfg, inp, { event: 'session-end', detail: inp.reason || '' }); A.sync(cfg); return allow(); }
     allow();
   } catch (e) {
     C.log('guard-error', { error: String(e && e.stack || e).slice(0, 500) });

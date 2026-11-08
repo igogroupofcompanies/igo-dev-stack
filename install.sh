@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/igogroupofcompanies/igo-dev-stack/main/install.sh | bash
 #
-# Optional env: IGO_NAME="Vignesh A"  IGO_PROFILE=strict|normal|open  IGO_NO_BRAIN=1  IGO_ECC=1  IGO_REPO=owner/repo  IGO_BRANCH=main
+# Optional env: IGO_TEAM_DIR=/path/to/team-folder  IGO_NAME="Vignesh A"  IGO_PROFILE=strict|normal|open  IGO_NO_BRAIN=1  IGO_ECC=1  IGO_REPO=owner/repo  IGO_BRANCH=main
 set -euo pipefail
 REPO="${IGO_REPO:-igogroupofcompanies/igo-dev-stack}"
 BRANCH="${IGO_BRANCH:-main}"
@@ -23,6 +23,7 @@ ARGS=()
 [ -n "${IGO_NAME:-}" ] && ARGS+=("--name=$IGO_NAME")
 [ -n "${IGO_NO_BRAIN:-}" ] && ARGS+=("--no-brain")
 [ -n "${IGO_ECC:-}" ] && ARGS+=("--ecc")
+[ -n "${IGO_TEAM_DIR:-}" ] && ARGS+=("--team-dir=$IGO_TEAM_DIR" "--team-name=${IGO_NAME:-$(id -un)}")
 bash "$DEST/skills/igo-setup/scripts/setup-claude-code.sh" ${ARGS[@]+"${ARGS[@]}"} || true
 
 export PATH="$HOME/.local/bin:$PATH"

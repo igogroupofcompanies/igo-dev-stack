@@ -13,7 +13,8 @@
     .\setup-claude-code.ps1 -NoBrain          # skip Obsidian second brain
 #>
 param([switch]$IncludeECC, [switch]$SkipAudit, [ValidateSet('strict','normal','open')][string]$SecurityProfile = 'normal',
-      [switch]$NoBrain, [string]$VaultPath = "$HOME\Documents\IGO-Brain", [string]$BrainName = $env:USERNAME, [string]$BrainPreset = 'executive')
+      [switch]$NoBrain, [string]$VaultPath = "$HOME\Documents\IGO-Brain", [string]$BrainName = $env:USERNAME, [string]$BrainPreset = 'executive',
+      [string]$TeamLogDir = '', [string]$TeamName = '')
 
 $ErrorActionPreference = 'Continue'
 $failed = @()
@@ -149,7 +150,7 @@ if (Test-Path $md) {
 
 # ---------- 7. IGO Security Guard ----------
 Step 'Activating IGO Security Guard'
-if (Test-Path $sec) { node $sec init; node $sec profile $SecurityProfile; node $sec selftest } else { Write-Host '  igo-sec not found (run from the plugin folder)' -ForegroundColor Yellow }
+if (Test-Path $sec) { node $sec init; node $sec profile $SecurityProfile; if ($TeamLogDir) { if ($TeamName) { node $sec team setup --dir $TeamLogDir --name $TeamName } else { node $sec team setup --dir $TeamLogDir } }; node $sec selftest } else { Write-Host '  igo-sec not found (run from the plugin folder)' -ForegroundColor Yellow }
 
 # ---------- 8. Obsidian second brain ----------
 if (-not $NoBrain) {

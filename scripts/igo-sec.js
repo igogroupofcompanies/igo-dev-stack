@@ -375,6 +375,10 @@ const HELP = `igo-sec - IGO Security Guard
   skills [--rebuild]           list the skill index the router uses
   router on|off                auto skill routing on every prompt
   blueprint auto|suggest|off   IGO project blueprint for code projects
+  team setup --dir <folder> [--name "Full Name"]   send this PC's Claude Code activity to the team folder
+  team share [--path C:\\IGO-Team-Logs]          (admin PC) commands to create a network share for the team folder
+  team report [--days 7] [--dir <folder>]          build the team dashboard (HTML) and open it
+  team sync | team status | team off | team on
   brain [--vault <dir>] [--name <n>] [--preset executive]        Obsidian second-brain setup (igo-brain.js)`;
 
 (async () => {
@@ -502,6 +506,46 @@ const HELP = `igo-sec - IGO Security Guard
       }
       case 'router': { const cfg = C.loadConfig(); if (pos[0]) { cfg.router = pos[0] !== 'off'; C.saveConfig(cfg); } console.log('Skill router: ' + (cfg.router !== false ? 'on' : 'off')); break; }
       case 'blueprint': { const cfg = C.loadConfig(); if (['auto', 'suggest', 'off'].includes(pos[0])) { cfg.blueprint = pos[0]; C.saveConfig(cfg); } console.log('Project blueprint: ' + (cfg.blueprint || 'auto')); break; }
+      case 'team': {
+        const A = require('../lib/activity'); const TR = require('../lib/team-report');
+        const cfg = C.loadConfig(); const sub = pos[0] || 'status';
+        if (sub === 'setup') {
+          const dir = opt('dir', ''); if (!dir) throw new Error('usage: team setup --dir <shared folder> [--name "Full Name"]');
+          cfg.teamLogDir = dir; if (opt('name')) cfg.teamMember = opt('name'); cfg.teamLogging = true; C.saveConfig(cfg);
+          const r = A.sync(cfg); console.log(`Team logging ON for ${A.member(cfg)}@${A.host()} → ${dir}\n${r.ok ? 'First sync OK (' + r.dest + ')' : 'Folder not reachable yet: ' + r.reason + ' - logs are kept locally and sent when it is.'}`); break;
+        }
+        if (sub === 'share') {
+          const p = opt('path', process.platform === 'win32' ? 'C:\\IGO-Team-Logs' : path.join(os.homedir(), 'IGO-Team-Logs'));
+          console.log(`Run in PowerShell AS ADMINISTRATOR on the admin PC (${os.hostname()}):\n
+  New-Item -ItemType Directory -Force "${p}" | Out-Null
+  New-SmbShare -Name "IGO-Team-Logs" -Path "${p}" -ChangeAccess "Everyone" -FullAccess "Administrators"
+  icacls "${p}" /grant "Everyone:(OI)(CI)M"
+
+Then on EACH team member's PC:
+  node "<plugin>\\scripts\\igo-sec.js" team setup --dir "\\\\${os.hostname()}\\IGO-Team-Logs" --name "Member Name"
+
+On this admin PC itself use the local path:  team setup --dir "${p}"
+No office network / remote staff? Use a Google Drive or OneDrive folder shared with the team instead (Google Drive for desktop: "G:\\My Drive\\IGO-Team-Logs").`); break;
+        }
+        if (sub === 'sync') { const r = A.sync(cfg); console.log(r.ok ? `Synced ${r.copied} file(s) → ${r.dest}` : 'Not synced: ' + r.reason); break; }
+        if (sub === 'off' || sub === 'on') { cfg.teamLogging = sub === 'on'; C.saveConfig(cfg); console.log('Team logging ' + sub.toUpperCase()); break; }
+        if (sub === 'report') {
+          const dir = opt('dir', cfg.teamLogDir); const days = Number(opt('days', 7));
+          const roots = dir ? [dir] : [A.LOCAL_DIR];
+          if (dir) A.sync(cfg);
+          const r = TR.build(cfg, days, roots);
+          const outDir = dir && fs.existsSync(dir) ? path.join(dir, '_dashboard') : path.join(C.SEC_DIR, 'reports');
+          fs.mkdirSync(outDir, { recursive: true });
+          const f = opt('out', path.join(outDir, `igo-team-activity-${A.day()}.html`)); fs.writeFileSync(f, r.html);
+          console.log(`Team dashboard: ${f}\n${r.count} events · members: ${r.members.join(', ') || 'none yet'}`);
+          if (!flag('no-open')) { const o = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', f]] : process.platform === 'darwin' ? ['open', [f]] : ['xdg-open', [f]]; spawnSync(o[0], o[1], { stdio: 'ignore' }); }
+          break;
+        }
+        // status
+        console.log(`Team logging: ${cfg.teamLogging !== false ? 'ON' : 'OFF'} · member: ${A.member(cfg)}@${A.host()} · folder: ${cfg.teamLogDir || '(local only: ' + A.LOCAL_DIR + ')'}`);
+        if (cfg.teamLogDir && fs.existsSync(cfg.teamLogDir)) for (const d of fs.readdirSync(cfg.teamLogDir).filter(x => !x.startsWith('_'))) { const m = C.readJSON(path.join(cfg.teamLogDir, d, '_member.json'), {}); console.log(`  ${d.padEnd(40)} last sync ${m.lastSync || '?'}`); }
+        break;
+      }
       case 'brain': { const r = spawnSync(process.execPath, [path.join(__dirname, 'igo-brain.js'), ...args.slice(1)], { stdio: 'inherit' }); process.exitCode = r.status; break; }
       default: console.log(HELP);
     }
