@@ -377,7 +377,9 @@ const HELP = `igo-sec - IGO Security Guard
   blueprint auto|suggest|off   IGO project blueprint for code projects
   team setup --dir <folder> [--name "Full Name"]   send this PC's Claude Code activity to the team folder
   team share [--path C:\\IGO-Team-Logs]          (admin PC) commands to create a network share for the team folder
-  team report [--days 7] [--dir <folder>]          build the team dashboard (HTML) and open it
+  team keygen --dir <folder>                       (admin PC, once) create the admin key - logs become readable only by you
+  team report [--days 30] [--dir <folder>]         build the team dashboard on this PC (Documents/IGO-Team-Dashboard) and open it
+  team schedule [--every 30]                       (admin PC) rebuild the dashboard automatically
   team sync | team status | team off | team on
   brain [--vault <dir>] [--name <n>] [--preset executive]        Obsidian second-brain setup (igo-brain.js)`;
 
@@ -509,10 +511,38 @@ const HELP = `igo-sec - IGO Security Guard
       case 'team': {
         const A = require('../lib/activity'); const TR = require('../lib/team-report');
         const cfg = C.loadConfig(); const sub = pos[0] || 'status';
+        const T = require('../lib/teamcrypto');
+        const PUBNAME = '_igo_admin_public_key.pem';
+        const PRIV = path.join(C.SEC_DIR, 'team-admin-private-key.pem');
+        if (sub === 'keygen') {   // ADMIN PC only: create the key pair; members encrypt with the public key
+          const dir = opt('dir', cfg.teamLogDir); if (!dir) throw new Error('usage: team keygen --dir <team folder>');
+          if (fs.existsSync(PRIV) && !flag('force')) throw new Error('Admin key already exists at ' + PRIV + ' (use --force to replace; old logs then become unreadable)');
+          const k = T.keygen(); C.ensureDir(); fs.writeFileSync(PRIV, k.privateKey, { mode: 0o600 });
+          fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, PUBNAME), k.publicKey);
+          cfg.teamAdmin = true; cfg.teamLogDir = dir; cfg.teamPublicKey = k.publicKey; cfg.teamKeyFingerprint = k.fingerprint; C.saveConfig(cfg);
+          console.log(`Admin key created.\n  Private key (keep safe, BACK IT UP, never share): ${PRIV}\n  Public key placed in team folder: ${path.join(dir, PUBNAME)}\n  Fingerprint: ${k.fingerprint}\nMembers' logs are now readable only on this PC. Tell members to check this fingerprint when they run team setup.`); break;
+        }
         if (sub === 'setup') {
-          const dir = opt('dir', ''); if (!dir) throw new Error('usage: team setup --dir <shared folder> [--name "Full Name"]');
-          cfg.teamLogDir = dir; if (opt('name')) cfg.teamMember = opt('name'); cfg.teamLogging = true; C.saveConfig(cfg);
-          const r = A.sync(cfg); console.log(`Team logging ON for ${A.member(cfg)}@${A.host()} → ${dir}\n${r.ok ? 'First sync OK (' + r.dest + ')' : 'Folder not reachable yet: ' + r.reason + ' - logs are kept locally and sent when it is.'}`); break;
+          const dir = opt('dir', ''); if (!dir) throw new Error('usage: team setup --dir <team folder> [--name "Full Name"]');
+          cfg.teamLogDir = dir; if (opt('name')) cfg.teamMember = opt('name'); cfg.teamLogging = true;
+          const pubF = path.join(dir, PUBNAME);
+          if (fs.existsSync(pubF)) {   // pin the admin key at setup time (a later swapped file is ignored)
+            const pub = fs.readFileSync(pubF, 'utf8'); const fp = T.fingerprint(pub);
+            if (cfg.teamKeyFingerprint && cfg.teamKeyFingerprint !== fp && !flag('rekey')) throw new Error(`Admin key in the folder (${fp}) differs from the pinned one (${cfg.teamKeyFingerprint}). If the admin really changed it, re-run with --rekey.`);
+            cfg.teamPublicKey = pub; cfg.teamKeyFingerprint = fp;
+          }
+          C.saveConfig(cfg);
+          const r = A.sync(cfg);
+          console.log(`Team logging ON for ${A.member(cfg)}@${A.host()} → ${dir}\n${cfg.teamPublicKey ? 'Encrypted: only the admin can read the logs (key ' + cfg.teamKeyFingerprint + ')' : 'WARNING: no admin key in the folder yet - logs are plain text. Admin should run: team keygen --dir "' + dir + '", then re-run this setup.'}\n${r.ok ? 'First sync OK (' + r.dest + ')' : 'Folder not reachable yet: ' + r.reason + ' - logs are kept locally and sent when it is.'}`); break;
+        }
+        if (sub === 'schedule') {   // ADMIN PC: rebuild the dashboard every 30 minutes
+          const node = process.execPath, me = __filename;
+          if (process.platform === 'win32') {
+            const tr = `"${node}" "${me}" team report --no-open`;
+            const r = spawnSync('schtasks', ['/Create', '/F', '/SC', 'MINUTE', '/MO', String(opt('every', 30)), '/TN', 'IGO Team Dashboard', '/TR', tr], { encoding: 'utf8' });
+            console.log(r.status === 0 ? `Scheduled: dashboard rebuilds every ${opt('every', 30)} min (task "IGO Team Dashboard"). Remove with: schtasks /Delete /TN "IGO Team Dashboard" /F` : 'Could not create task: ' + (r.stderr || r.stdout));
+          } else console.log(`Add to crontab (crontab -e):\n*/${opt('every', 30)} * * * * "${node}" "${me}" team report --no-open`);
+          break;
         }
         if (sub === 'share') {
           const p = opt('path', process.platform === 'win32' ? 'C:\\IGO-Team-Logs' : path.join(os.homedir(), 'IGO-Team-Logs'));
@@ -530,14 +560,16 @@ No office network / remote staff? Use a Google Drive or OneDrive folder shared w
         if (sub === 'sync') { const r = A.sync(cfg); console.log(r.ok ? `Synced ${r.copied} file(s) → ${r.dest}` : 'Not synced: ' + r.reason); break; }
         if (sub === 'off' || sub === 'on') { cfg.teamLogging = sub === 'on'; C.saveConfig(cfg); console.log('Team logging ' + sub.toUpperCase()); break; }
         if (sub === 'report') {
-          const dir = opt('dir', cfg.teamLogDir); const days = Number(opt('days', 7));
+          const dir = opt('dir', cfg.teamLogDir); const days = Number(opt('days', 30));
           const roots = dir ? [dir] : [A.LOCAL_DIR];
           if (dir) A.sync(cfg);
-          const r = TR.build(cfg, days, roots);
-          const outDir = dir && fs.existsSync(dir) ? path.join(dir, '_dashboard') : path.join(C.SEC_DIR, 'reports');
+          const priv = fs.existsSync(PRIV) ? fs.readFileSync(PRIV, 'utf8') : '';
+          const r = TR.build(cfg, days, roots, priv);
+          // dashboard stays on the admin PC (NOT in the shared folder) so team members cannot open it
+          const outDir = opt('outdir', path.join(os.homedir(), 'Documents', 'IGO-Team-Dashboard'));
           fs.mkdirSync(outDir, { recursive: true });
-          const f = opt('out', path.join(outDir, `igo-team-activity-${A.day()}.html`)); fs.writeFileSync(f, r.html);
-          console.log(`Team dashboard: ${f}\n${r.count} events · members: ${r.members.join(', ') || 'none yet'}`);
+          const f = opt('out', path.join(outDir, 'IGO Team Activity.html')); fs.writeFileSync(f, r.html);
+          console.log(`Team dashboard: ${f}\n${r.count} events · members: ${r.members.join(', ') || 'none yet'}${r.stats.encrypted ? ` · ${r.stats.encrypted} encrypted files` : ''}${r.stats.undecryptable ? ` · ${r.stats.undecryptable} NOT decryptable (missing/wrong admin key)` : ''}`);
           if (!flag('no-open')) { const o = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', f]] : process.platform === 'darwin' ? ['open', [f]] : ['xdg-open', [f]]; spawnSync(o[0], o[1], { stdio: 'ignore' }); }
           break;
         }

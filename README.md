@@ -84,14 +84,17 @@ Restart Claude Code, then say **`igo setup`**. You can also run the script direc
 - Windows: `powershell -ExecutionPolicy Bypass -File skills/igo-setup/scripts/setup-claude-code.ps1 [-SecurityProfile strict] [-IncludeECC] [-SkipAudit]`
 - macOS/Linux: `bash skills/igo-setup/scripts/setup-claude-code.sh [--profile=strict] [--ecc] [--skip-audit]`
 
-## Team activity dashboard
-Every install records Claude Code activity per member: session times, prompts, commands, files changed, and security blocks. Secrets, Aadhaar and PAN numbers are masked before anything is written. Members see a notice that logging is on. Point all PCs at one team folder and the admin gets a dashboard of who did what, when, and in which project: active time, an hour-by-hour heat-map, per-project time, and a full timeline with filters.
+## Team activity dashboard (private to the admin)
+Every PC records its own Claude Code activity: sessions, prompts, commands, files changed, and security alerts. Secrets, Aadhaar and PAN numbers are masked first. Each PC uploads the logs **encrypted with the admin's public key** to a shared folder, which can be Google Drive, OneDrive or a network share. Team members can upload but cannot read anyone's logs. Only the admin PC can decrypt them and build the dashboard. The dashboard shows member status, a day timeline, an hourly heat-map, per-project time, a session-grouped activity feed, and CSV export.
 ```
-node scripts/igo-sec.js team share                                   # admin PC: commands to create \\ADMIN-PC\IGO-Team-Logs
-node scripts/igo-sec.js team setup --dir "\\ADMIN-PC\IGO-Team-Logs" --name "Ravi"   # each member PC
-node scripts/igo-sec.js team report --days 7                         # admin: open the dashboard
+# admin PC (once)
+node scripts/igo-sec.js team keygen --dir "G:\My Drive\IGO-Team-Logs"
+# each member PC
+node scripts/igo-sec.js team setup  --dir "G:\My Drive\IGO-Team-Logs" --name "Ravi"
+# admin PC
+node scripts/igo-sec.js team report      # opens Documents/IGO-Team-Dashboard/IGO Team Activity.html
+node scripts/igo-sec.js team schedule    # auto-refresh every 30 min
 ```
-No office share? Use a Google Drive or OneDrive folder shared with the team (for example `G:\My Drive\IGO-Team-Logs`). At install time: `$env:IGO_TEAM_DIR="..."; $env:IGO_NAME="Ravi"` before the one-liner.
 
 ## Automatic skill routing
 You or your team just type the request. For every prompt, the router scores all enabled skills, commands and agents (from every installed plugin, `~/.claude/skills` and the project's `.claude/skills`) against the request. It combines keyword relevance with high-precision intent rules (bug, UI, deploy, security, documents, memory and so on), then passes the best 1-4 matches to Claude to use automatically.
