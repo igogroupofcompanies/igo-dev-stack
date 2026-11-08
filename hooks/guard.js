@@ -291,6 +291,7 @@ async function sessionStart(inp, cfg, state) {
   const known = state.knownPlugins || {};
   const keys = new Set(plugins.map(p => p.key));
 
+  const unapproved = [];
   for (const p of plugins) {
     const isOn = enabled[p.key] !== false;
     // kill switch (feature 23)
@@ -299,13 +300,18 @@ async function sessionStart(inp, cfg, state) {
       else notes.push(`BLOCKED plugin still enabled: ${p.key}. Run the igo-security-center skill to quarantine it.`);
       continue;
     }
-    const ap = (cfg.approved || {})[p.key];
+    const ap = (cfg.approved || {})[p.key] || ((cfg.trustedMarketplaces || []).includes(p.market) ? { source: 'trusted-marketplace' } : null);
     // pin drift (feature 8)
     if (ap && ap.sha && p.sha && ap.sha !== p.sha) notes.push(`${p.key} changed since it was approved (pinned ${ap.sha.slice(0, 7)}, now ${p.sha.slice(0, 7)}). Re-audit before use.`);
     // allowlist (feature 22)
     if (!ap && isOn) {
       if (cfg.enforceAllowlist) { try { C.setPluginEnabled(p.key, false); } catch (_) {} notes.push(`Disabled unapproved plugin ${p.key} (allowlist enforced).`); C.log('allowlist-disable', { plugin: p.key }); }
-      else notes.push(`Unapproved plugin enabled: ${p.key}. Suggest auditing it (igo-plugin-audit).`);
+      else {
+        // advisory: mention each unapproved plugin once per version, not every session
+        state.unapprovedNoted = state.unapprovedNoted || {};
+        const v = p.sha || p.version || 'x';
+        if (state.unapprovedNoted[p.key] !== v) { unapproved.push(p.key); state.unapprovedNoted[p.key] = v; }
+      }
     }
     // new plugin since last session -> quick local scan (features 1-5 after the fact)
     const sig = p.sha || p.version || 'x';
@@ -320,11 +326,16 @@ async function sessionStart(inp, cfg, state) {
       known[p.key] = sig;
     }
   }
+  if (unapproved.length) notes.push(`Not yet approved (shown once): ${unapproved.join(', ')}. Review with igo-plugin-audit; approve with: igo-sec approve <plugin@marketplace>, or igo-sec approve --all-enabled after review.`);
   for (const k of Object.keys(known)) if (!keys.has(k)) delete known[k];
   state.knownPlugins = known; C.saveState(state);
 
   const missing = ['superpowers', 'context7', 'security-guidance', 'document-skills'].filter(n => plugins.length && !plugins.some(p => p.name === n));
-  if (missing.length) notes.push(`IGO stack incomplete (missing: ${missing.join(', ')}). If the user starts coding work, suggest the igo-setup skill once.`);
+  const today = new Date().toISOString().slice(0, 10);
+  if (missing.length && state.missingNoted !== today) {
+    state.missingNoted = today; C.saveState(state);
+    notes.push(`IGO stack incomplete (missing: ${missing.join(', ')}). Fix: run the igo-setup skill, or: claude plugin install context7@claude-plugins-official --scope user; claude plugin install security-guidance@claude-plugins-official --scope user; claude plugin marketplace add anthropics/skills; claude plugin install document-skills@anthropic-agent-skills --scope user`);
+  }
 
   C.log('session', { source: inp.source || '', profile: cfg.profile, plugins: plugins.length, notes: notes.length });
   let ctx = rules + `\n\nIGO Security Guard is active (profile: ${cfg.profile}). Commands, file access and fetched content are checked automatically. IGO Skill Router suggests matching skills on each prompt - use them without being asked.`;

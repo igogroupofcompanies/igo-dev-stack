@@ -359,6 +359,7 @@ const HELP = `igo-sec - IGO Security Guard
   status                       profile, plugins (approved / blocked / unapproved), recent events
   audit <repo|path|plugin@mkt> [--json] [--approve] [--no-net]   scan before installing (features 1-8)
   approve <plugin@mkt> [--repo owner/repo] [--sha <commit>]       add to allowlist, pin commit (8, 22)
+  approve --all-enabled        approve + pin every currently enabled plugin (after review)
   quarantine <plugin@mkt>      disable now + blocklist (23)       unblock <plugin@mkt>
   review [dir] [--deep] [--no-net]   internal security review: secrets, OWASP, DPDP, deps, Supabase (15-19)
   scan-secrets [dir] | --staged      secret scan (16)
@@ -388,7 +389,7 @@ const HELP = `igo-sec - IGO Security Guard
         console.log(`Profile: ${cfg.profile} | allowlist: ${cfg.enforceAllowlist ? 'enforced' : 'advisory'} | auto-quarantine: ${cfg.autoQuarantine} | remote policy: ${cfg.remotePolicyUrl || 'none'}`);
         console.log(`Last 7 days: ${ev.filter(e => e.decision === 'deny').length} blocked, ${ev.filter(e => e.decision === 'ask').length} confirmations, ${ev.filter(e => e.event === 'injection').length} injection warnings`);
         console.log(`\nPlugins (${ps.length}):`);
-        ps.forEach(p => console.log(`  ${(cfg.blocked || []).includes(p.key) ? '⛔' : cfg.approved[p.key] ? '✅' : '⚠️ '} ${p.key}${en[p.key] === false ? ' (disabled)' : ''}${p.sha ? ' @' + p.sha.slice(0, 7) : ''}`));
+        ps.forEach(p => console.log(`  ${(cfg.blocked || []).includes(p.key) ? '⛔' : (cfg.approved[p.key] || (cfg.trustedMarketplaces || []).includes(p.market)) ? '✅' : '⚠️ '} ${p.key}${en[p.key] === false ? ' (disabled)' : ''}${p.sha ? ' @' + p.sha.slice(0, 7) : ''}`));
         break;
       }
       case 'audit': {
@@ -404,7 +405,12 @@ const HELP = `igo-sec - IGO Security Guard
         process.exitCode = a.verdict === 'BLOCK' ? 2 : a.verdict === 'REVIEW' ? 1 : 0; break;
       }
       case 'approve': {
-        const key = pos[0]; if (!key) throw new Error('usage: approve <plugin@marketplace> [--repo owner/repo] [--sha commit]');
+        if (flag('all-enabled')) {
+          const cfg = C.loadConfig(); const en = C.enabledMap(); let n = 0;
+          for (const p of C.installedPlugins()) if (en[p.key] !== false && !cfg.approved[p.key] && !(cfg.blocked || []).includes(p.key)) { cfg.approved[p.key] = { sha: p.sha, approvedAt: new Date().toISOString(), source: 'approve --all-enabled' }; n++; console.log('Approved ' + p.key + (p.sha ? ' @' + p.sha.slice(0, 7) : '')); }
+          C.saveConfig(cfg); C.log('approve', { all: true, count: n }); console.log(n ? `${n} plugin(s) approved and pinned.` : 'Nothing to approve.'); break;
+        }
+        const key = pos[0]; if (!key) throw new Error('usage: approve <plugin@marketplace> [--repo owner/repo] [--sha commit] | approve --all-enabled');
         const cfg = C.loadConfig(); const inst = C.installedPlugins().find(p => p.key === key);
         cfg.approved[key] = { repo: opt('repo', ''), sha: opt('sha', inst ? inst.sha : ''), approvedAt: new Date().toISOString() };
         cfg.blocked = (cfg.blocked || []).filter(b => b !== key); C.saveConfig(cfg); C.log('approve', { key });
