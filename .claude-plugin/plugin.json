@@ -1,6 +1,6 @@
 {
   "name": "igo-dev-stack",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "IGO Group's Claude Code stack: private team activity dashboard (encrypted logs), 26 top plugins, automatic prompt-based skill routing, IGO project blueprint (AGENTS.md + .ai harness + docs) enforced per project, Obsidian second brain, and IGO Security Guard (pre-install audit, command firewall, intent mismatch, secret/folder protection, prompt-injection scan, OWASP/DPDP review, kill switch).",
   "author": {
     "name": "IGO Group IT & AI Department"

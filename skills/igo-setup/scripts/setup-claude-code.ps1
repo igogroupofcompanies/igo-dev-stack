@@ -14,7 +14,7 @@
 #>
 param([switch]$IncludeECC, [switch]$SkipAudit, [ValidateSet('strict','normal','open')][string]$SecurityProfile = 'normal',
       [switch]$NoBrain, [string]$VaultPath = "$HOME\Documents\IGO-Brain", [string]$BrainName = $env:USERNAME, [string]$BrainPreset = 'executive',
-      [string]$TeamLogDir = '', [string]$TeamName = '')
+      [string]$TeamLogDir = '', [string]$TeamName = '', [switch]$TeamAdmin, [string]$TeamLink = '')
 
 $ErrorActionPreference = 'Continue'
 $failed = @()
@@ -150,7 +150,35 @@ if (Test-Path $md) {
 
 # ---------- 7. IGO Security Guard ----------
 Step 'Activating IGO Security Guard'
-if (Test-Path $sec) { node $sec init; node $sec profile $SecurityProfile; if ($TeamLogDir) { if ($TeamName) { node $sec team setup --dir $TeamLogDir --name $TeamName } else { node $sec team setup --dir $TeamLogDir } }; node $sec selftest } else { Write-Host '  igo-sec not found (run from the plugin folder)' -ForegroundColor Yellow }
+if (Test-Path $sec) {
+  node $sec init; node $sec profile $SecurityProfile
+  if ($TeamLogDir -or $TeamAdmin) {
+    # ---- Google Drive for desktop (team activity folder) ----
+    Step 'Team activity folder (Google Drive for desktop)'
+    $gd = @("$env:ProgramFiles\Google\Drive File Stream\launch.bat", "$env:ProgramFiles\Google\Drive File Stream") | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $gd) {
+      Write-Host '  Installing Google Drive for desktop...'
+      winget install -e --id Google.GoogleDrive --silent --accept-package-agreements --accept-source-agreements
+    }
+    $exe = Get-ChildItem "$env:ProgramFiles\Google\Drive File Stream" -Recurse -Filter GoogleDriveFS.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($exe -and -not (Get-Process GoogleDriveFS -ErrorAction SilentlyContinue)) { Start-Process $exe.FullName }
+    if (-not $TeamLogDir) { $TeamLogDir = 'G:\My Drive\IGO-Team-Logs' }
+    if (-not (Test-Path $TeamLogDir)) {
+      Write-Host "  Waiting for $TeamLogDir ..." -ForegroundColor Yellow
+      Write-Host '   1. Sign in to Google Drive for desktop (window / tray icon) with your company Google account.'
+      if ($TeamAdmin) { Write-Host '   2. In Google Drive create the folder "IGO-Team-Logs" in My Drive.' }
+      else { Write-Host '   2. Open the shared IGO-Team-Logs folder in the browser -> right-click -> Organize -> Add shortcut to My Drive.'; if ($TeamLink) { Start-Process $TeamLink } else { Start-Process 'https://drive.google.com/drive/shared-with-me' } }
+      $deadline = (Get-Date).AddMinutes(15)
+      while (-not (Test-Path $TeamLogDir) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 10; Write-Host -NoNewline '.' }
+      Write-Host ''
+    }
+    if (Test-Path $TeamLogDir) {
+      if ($TeamAdmin) { if ($TeamName) { node $sec team admin-setup --dir $TeamLogDir --name $TeamName } else { node $sec team admin-setup --dir $TeamLogDir } }
+      elseif ($TeamName) { node $sec team setup --dir $TeamLogDir --name $TeamName } else { node $sec team setup --dir $TeamLogDir }
+    } else { Write-Host "  Folder not found yet. Later run: node `"$sec`" team setup --dir `"$TeamLogDir`" --name `"Your Name`"" -ForegroundColor Yellow; $failed += 'team-folder' }
+  }
+  node $sec selftest
+} else { Write-Host '  igo-sec not found (run from the plugin folder)' -ForegroundColor Yellow }
 
 # ---------- 8. Obsidian second brain ----------
 if (-not $NoBrain) {

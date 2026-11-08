@@ -9,7 +9,12 @@ Each PC records its own Claude Code activity (secrets, Aadhaar, PAN masked) and 
 
 CLI: `node "${CLAUDE_PLUGIN_ROOT}/scripts/igo-sec.js" team <command>`
 
-## Setup with Google Drive (admin remote, team on office network)
+## One-command setup
+- **Admin PC**: `$env:IGO_TEAM_ADMIN="1"` before the one-line installer, or `team admin-setup`. This installs Google Drive for desktop if needed, finds `G:\My Drive\IGO-Team-Logs`, creates the admin key (saved in `Documents\IGO-Team-Dashboard\.admin-key`, not in Drive), schedules the dashboard every 30 min, and opens it.
+- **Member PC**: `$env:IGO_TEAM_LINK="<folder link>"; $env:IGO_NAME="<Name>"` before the one-line installer. This installs Google Drive for desktop, opens the shared folder so the member can **Add shortcut to My Drive**, waits for it, then runs encrypted `team setup`.
+- To share the folder with members, use the Google Drive connector (`share_file`, Editor) or the Drive web UI.
+
+## Setup with Google Drive (manual steps)
 1. **Admin** (Google Drive): create folder `IGO-Team-Logs` in My Drive → Share → add each member's Google account as **Editor**.
 2. **Admin PC**: install Google Drive for desktop, then
    `team keygen --dir "G:\My Drive\IGO-Team-Logs"` → creates the admin key (private key stays in `~/.claude/igo-security/team-admin-private-key.pem` - back it up offline) and puts the public key in the folder. Note the fingerprint.

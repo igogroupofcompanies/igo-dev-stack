@@ -7,7 +7,9 @@
 #   $env:IGO_PROFILE = "strict"        # security profile: strict | normal | open
 #   $env:IGO_NO_BRAIN = "1"            # skip Obsidian second brain
 #   $env:IGO_ECC = "1"                 # also install ECC
-#   $env:IGO_TEAM_DIR = "\\ADMIN-PC\IGO-Team-Logs"   # team activity folder (admin dashboard)
+#   $env:IGO_TEAM_LINK = "https://drive.google.com/drive/folders/..."  # team: shared IGO-Team-Logs folder (installs Google Drive for desktop)
+#   $env:IGO_TEAM_DIR = "G:\My Drive\IGO-Team-Logs"  # team folder path (default when a link is given)
+#   $env:IGO_TEAM_ADMIN = "1"          # admin PC: create the admin key + scheduled dashboard
 #   $env:IGO_REPO = "owner/repo"       # use a fork
 #   $env:IGO_BRANCH = "main"
 
@@ -43,7 +45,12 @@
   if ($env:IGO_NAME)     { $setupArgs += @('-BrainName', $env:IGO_NAME) }
   if ($env:IGO_NO_BRAIN) { $setupArgs += '-NoBrain' }
   if ($env:IGO_ECC)      { $setupArgs += '-IncludeECC' }
-  if ($env:IGO_TEAM_DIR) { $setupArgs += @('-TeamLogDir', $env:IGO_TEAM_DIR); $setupArgs += @('-TeamName', $(if ($env:IGO_NAME) { $env:IGO_NAME } else { $env:USERNAME })) }
+  if ($env:IGO_TEAM_DIR -or $env:IGO_TEAM_LINK -or $env:IGO_TEAM_ADMIN) {
+    if ($env:IGO_TEAM_DIR)   { $setupArgs += @('-TeamLogDir', $env:IGO_TEAM_DIR) }
+    if ($env:IGO_TEAM_LINK)  { $setupArgs += @('-TeamLink', $env:IGO_TEAM_LINK) }
+    if ($env:IGO_TEAM_ADMIN) { $setupArgs += '-TeamAdmin' }
+    $setupArgs += @('-TeamName', $(if ($env:IGO_NAME) { $env:IGO_NAME } else { $env:USERNAME }))
+  }
   & powershell.exe @setupArgs
 
   # 4. Register igo-dev-stack itself in Claude Code (from GitHub, so /plugin update works later)

@@ -9,7 +9,7 @@
       "name": "igo-dev-stack",
       "source": "./",
       "description": "IGO Claude Code stack + IGO Security Guard",
-      "version": "0.6.0"
+      "version": "0.7.0"
     }
   ],
   "description": "IGO Group's free, open-source Claude Code stack with built-in security guard."

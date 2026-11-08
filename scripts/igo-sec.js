@@ -377,6 +377,7 @@ const HELP = `igo-sec - IGO Security Guard
   blueprint auto|suggest|off   IGO project blueprint for code projects
   team setup --dir <folder> [--name "Full Name"]   send this PC's Claude Code activity to the team folder
   team share [--path C:\\IGO-Team-Logs]          (admin PC) commands to create a network share for the team folder
+  team admin-setup [--dir <folder>]                (admin PC, once) key + schedule + first dashboard; folder auto-detected
   team keygen --dir <folder>                       (admin PC, once) create the admin key - logs become readable only by you
   team report [--days 30] [--dir <folder>]         build the team dashboard on this PC (Documents/IGO-Team-Dashboard) and open it
   team schedule [--every 30]                       (admin PC) rebuild the dashboard automatically
@@ -513,17 +514,34 @@ const HELP = `igo-sec - IGO Security Guard
         const cfg = C.loadConfig(); const sub = pos[0] || 'status';
         const T = require('../lib/teamcrypto');
         const PUBNAME = '_igo_admin_public_key.pem';
-        const PRIV = path.join(C.SEC_DIR, 'team-admin-private-key.pem');
+        const KEYNAME = 'team-admin-private-key.pem';
+        const KEYDIRS = [C.SEC_DIR, path.join(os.homedir(), 'Documents', 'IGO-Team-Dashboard', '.admin-key')];
+        const PRIV = KEYDIRS.map(d => path.join(d, KEYNAME)).find(f => fs.existsSync(f)) || path.join(KEYDIRS[1], KEYNAME);
+        // auto-detect the Google Drive / OneDrive team folder when none is configured
+        const detectDir = () => {
+          const name = 'IGO-Team-Logs', H = os.homedir(), c = [];
+          if (process.platform === 'win32') { for (const L of 'GHIJKLMNOPDEF') c.push(`${L}:\\My Drive\\${name}`); c.push(path.join(H, 'Google Drive', 'My Drive', name), path.join(H, 'OneDrive', name)); }
+          else { try { for (const d of fs.readdirSync(path.join(H, 'Library', 'CloudStorage'))) if (/^GoogleDrive-/.test(d)) c.push(path.join(H, 'Library', 'CloudStorage', d, 'My Drive', name)); } catch (_) {} c.push(path.join(H, 'Google Drive', 'My Drive', name)); }
+          return c.find(x => { try { return fs.statSync(x).isDirectory(); } catch (_) { return false; } }) || '';
+        };
+        if (sub === 'admin-setup') {   // ADMIN PC: key (if missing) + config + scheduled dashboard + first report
+          const dir = opt('dir', cfg.teamLogDir || detectDir()); if (!dir) throw new Error('Team folder not found. Install Google Drive for desktop, create "IGO-Team-Logs" in My Drive, then: team admin-setup --dir "G:\\My Drive\\IGO-Team-Logs"');
+          const step = a => spawnSync(process.execPath, [__filename, ...a], { stdio: 'inherit' });
+          if (!fs.existsSync(PRIV)) step(['team', 'keygen', '--dir', dir]); else console.log('Admin key already present: ' + PRIV);
+          step(['team', 'setup', '--dir', dir, ...(opt('name') ? ['--name', opt('name')] : [])]);
+          step(['team', 'schedule']); step(['team', 'report', '--dir', dir]);
+          break;
+        }
         if (sub === 'keygen') {   // ADMIN PC only: create the key pair; members encrypt with the public key
-          const dir = opt('dir', cfg.teamLogDir); if (!dir) throw new Error('usage: team keygen --dir <team folder>');
+          const dir = opt('dir', cfg.teamLogDir || detectDir()); if (!dir) throw new Error('usage: team keygen --dir <team folder>');
           if (fs.existsSync(PRIV) && !flag('force')) throw new Error('Admin key already exists at ' + PRIV + ' (use --force to replace; old logs then become unreadable)');
-          const k = T.keygen(); C.ensureDir(); fs.writeFileSync(PRIV, k.privateKey, { mode: 0o600 });
+          const k = T.keygen(); fs.mkdirSync(path.dirname(PRIV), { recursive: true }); fs.writeFileSync(PRIV, k.privateKey, { mode: 0o600 });
           fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, PUBNAME), k.publicKey);
           cfg.teamAdmin = true; cfg.teamLogDir = dir; cfg.teamPublicKey = k.publicKey; cfg.teamKeyFingerprint = k.fingerprint; C.saveConfig(cfg);
           console.log(`Admin key created.\n  Private key (keep safe, BACK IT UP, never share): ${PRIV}\n  Public key placed in team folder: ${path.join(dir, PUBNAME)}\n  Fingerprint: ${k.fingerprint}\nMembers' logs are now readable only on this PC. Tell members to check this fingerprint when they run team setup.`); break;
         }
         if (sub === 'setup') {
-          const dir = opt('dir', ''); if (!dir) throw new Error('usage: team setup --dir <team folder> [--name "Full Name"]');
+          const dir = opt('dir', cfg.teamLogDir || detectDir()); if (!dir) throw new Error('Team folder not found. Install Google Drive for desktop, add the shared "IGO-Team-Logs" folder to My Drive, then: team setup --dir "G:\\My Drive\\IGO-Team-Logs" --name "Your Name"');
           cfg.teamLogDir = dir; if (opt('name')) cfg.teamMember = opt('name'); cfg.teamLogging = true;
           const pubF = path.join(dir, PUBNAME);
           if (fs.existsSync(pubF)) {   // pin the admin key at setup time (a later swapped file is ignored)
@@ -560,7 +578,7 @@ No office network / remote staff? Use a Google Drive or OneDrive folder shared w
         if (sub === 'sync') { const r = A.sync(cfg); console.log(r.ok ? `Synced ${r.copied} file(s) → ${r.dest}` : 'Not synced: ' + r.reason); break; }
         if (sub === 'off' || sub === 'on') { cfg.teamLogging = sub === 'on'; C.saveConfig(cfg); console.log('Team logging ' + sub.toUpperCase()); break; }
         if (sub === 'report') {
-          const dir = opt('dir', cfg.teamLogDir); const days = Number(opt('days', 30));
+          const dir = opt('dir', cfg.teamLogDir || detectDir()); const days = Number(opt('days', 30));
           const roots = dir ? [dir] : [A.LOCAL_DIR];
           if (dir) A.sync(cfg);
           const priv = fs.existsSync(PRIV) ? fs.readFileSync(PRIV, 'utf8') : '';
