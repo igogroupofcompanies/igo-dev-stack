@@ -3,6 +3,8 @@
 **A free, open-source Claude Code setup by [IGO Group](https://www.igogroups.in).**
 It installs 26 of the best Claude Code plugins in one go, sets up an **Obsidian second brain**, and makes Claude use them automatically. **IGO Security Guard**, built in, checks every plugin before install and every action while Claude works.
 
+**Step-by-step guide for admins and team members: [SETUP.md](SETUP.md)**
+
 ## Quick install (new system)
 
 **Windows**: open PowerShell (normal, not admin) and run:
