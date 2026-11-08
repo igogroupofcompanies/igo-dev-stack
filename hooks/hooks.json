@@ -1,0 +1,20 @@
+{
+  "description": "IGO Security Guard + auto-use rules",
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume|clear|compact",
+        "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.js\" SessionStart", "timeout": 20 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.js\" UserPromptSubmit", "timeout": 5 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash|PowerShell|Read|Grep|Glob|NotebookRead|Write|Edit|MultiEdit|NotebookEdit|WebFetch",
+        "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.js\" PreToolUse", "timeout": 10 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "WebFetch|WebSearch|Read|Bash|Grep|mcp__.*",
+        "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.js\" PostToolUse", "timeout": 10 } ] }
+    ]
+  }
+}

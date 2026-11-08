@@ -1,0 +1,29 @@
+{
+  "name": "igo-dev-stack",
+  "version": "0.4.1",
+  "description": "IGO Group's Claude Code stack: 26 top plugins, automatic prompt-based skill routing, IGO project blueprint (AGENTS.md + .ai harness + docs) enforced per project, Obsidian second brain, and IGO Security Guard (pre-install audit, command firewall, intent mismatch, secret/folder protection, prompt-injection scan, OWASP/DPDP review, kill switch).",
+  "author": {
+    "name": "IGO Group IT & AI Department"
+  },
+  "homepage": "https://www.igogroups.in",
+  "license": "MIT",
+  "keywords": [
+    "igo",
+    "claude-code",
+    "setup",
+    "skills",
+    "workflow",
+    "security",
+    "prompt-injection",
+    "supply-chain",
+    "dpdp",
+    "owasp",
+    "obsidian",
+    "second-brain",
+    "blueprint",
+    "agents-md",
+    "skill-router",
+    "antigravity"
+  ],
+  "repository": "https://github.com/igogroupofcompanies/igo-dev-stack"
+}
